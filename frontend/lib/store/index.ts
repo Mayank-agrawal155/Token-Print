@@ -147,7 +147,13 @@ export const useStore = create<StoreState>()((set, get, store) => ({
   // Classroom controls are UI state but advance the shared generation cursor.
   classroomStep: () => set((state) => {
     const count = state.genMeta?.op_catalog?.length ?? 1;
-    return { opIndex: (state.opIndex + 1) % count };
+    const nextOpIndex = (state.opIndex + 1) % count;
+    if (state.collabEnabled && state.classroomPresenting) {
+      import("../collab/client").then(({ getCollabClient }) => {
+        getCollabClient().sendStep(nextOpIndex);
+      });
+    }
+    return { opIndex: nextOpIndex };
   }),
 }));
 

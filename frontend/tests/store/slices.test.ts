@@ -449,3 +449,79 @@ test("Phase 5.8a: anchor positions map to correct attention entries and pitch ca
   assert.equal(anchorToLayerIndex(catalog, anchors, 999, numLayers), -1);
   assert.equal(anchorToLayerIndex([], [], 0, numLayers), -1);
 });
+
+test("Phase 5.8c: Collab store slice toggling, initial state, and peer management", () => {
+  const store = makeStore();
+
+  // Initial state check
+  const state0 = store.getState();
+  assert.equal(state0.collabEnabled, false);
+  assert.equal(state0.collabConnected, false);
+  assert.deepEqual(state0.collabPeers, {});
+
+  // Toggle collab
+  state0.toggleCollab();
+  assert.equal(store.getState().collabEnabled, true);
+
+  // Set room ID
+  state0.setCollabRoomId("tensor-collab-42");
+  assert.equal(store.getState().collabRoomId, "tensor-collab-42");
+
+  // Populate peers
+  const peerAlice = {
+    user_id: "alice",
+    name: "Alice",
+    color: "#10b981",
+    role: "viewer" as const,
+  };
+  const peerBob = {
+    user_id: "bob",
+    name: "Bob",
+    color: "#3b82f6",
+    role: "presenter" as const,
+  };
+  state0.setCollabPeers({ alice: peerAlice, bob: peerBob });
+  assert.equal(Object.keys(store.getState().collabPeers).length, 2);
+
+  // Update peer cursor
+  const cursorAlice = { x: 0.35, y: 0.65, activeLayer: 3, activeOp: "attn", timestamp: 1000 };
+  state0.updatePeerCursor("alice", cursorAlice);
+  const updatedAlice = store.getState().collabPeers["alice"];
+  assert.deepEqual(updatedAlice.cursor, cursorAlice);
+
+  // Update peer selection
+  const selBob = { kind: "layer" as const, index: 8, name: "Layer 8" };
+  state0.updatePeerSelection("bob", selBob);
+  const updatedBob = store.getState().collabPeers["bob"];
+  assert.deepEqual(updatedBob.selection, selBob);
+
+  // Classroom presenter mode toggle
+  assert.equal(store.getState().classroomPresenting, false);
+  state0.toggleClassroomPresenting();
+  assert.equal(store.getState().classroomPresenting, true);
+});
+
+test("Phase 5.8c: normalizeCursor correctly clamps coordinates and attaches layer metadata", () => {
+  const { normalizeCursor } = require("../../lib/collab/client");
+
+  // Centered coordinate
+  const c1 = normalizeCursor(500, 250, 1000, 500, { activeLayer: 5, activeOp: "mlp" });
+  assert.equal(c1.x, 0.5);
+  assert.equal(c1.y, 0.5);
+  assert.equal(c1.activeLayer, 5);
+  assert.equal(c1.activeOp, "mlp");
+  assert.ok(typeof c1.timestamp === "number");
+
+  // Extreme out-of-bounds coordinates must clamp safely to [0, 1]
+  const c2 = normalizeCursor(-200, 1200, 800, 600);
+  assert.equal(c2.x, 0);
+  assert.equal(c2.y, 1);
+  assert.equal(c2.activeLayer, null);
+  assert.equal(c2.activeOp, null);
+
+  // Zero dimensions guard (no division by zero)
+  const c3 = normalizeCursor(10, 10, 0, 0);
+  assert.ok(Number.isFinite(c3.x));
+  assert.ok(Number.isFinite(c3.y));
+});
+

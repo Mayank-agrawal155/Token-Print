@@ -35,6 +35,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 
 from .ablation import Ablation
+from .collab import collab_manager
 from .gguf_cache import GGUFEngineCache
 from .gguf_engine import GGUF_ENGINE_AVAILABLE, GGUFEngine
 from .model import ModelEngine, TokenizedTooLong
@@ -872,6 +873,48 @@ async def ws_generate(ws: WebSocket) -> None:
             await ws.close()  # graceful close frame after the stream ends
         except (RuntimeError, WebSocketDisconnect):
             logger.debug("WebSocket already closed.")
+
+
+# --------------------------------------------------------------------------- #
+# Collaborative Multi-Viewer & Classroom Cursors (Phase 5.8c / #301)
+# --------------------------------------------------------------------------- #
+
+@app.websocket("/ws/collab/{room_id}")
+async def ws_collab(
+    ws: WebSocket,
+    room_id: str,
+    user_id: str = "anon",
+    name: str = "Viewer",
+    color: str = "#38bdf8",
+    role: str = "viewer",
+) -> None:
+    """Collaborative multi-viewer channel for presence, cursors, and selection.
+
+    Allows multiple browser tabs/viewers over the same served trace or model
+    to share presence, pointer coordinates, layer/op selections, and
+    classroom presenter stepping.
+    """
+    await ws.accept()
+    await collab_manager.connect(
+        room_id=room_id,
+        user_id=user_id,
+        ws=ws,
+        name=name,
+        color=color,
+        role=role,
+    )
+    try:
+        while True:
+            data = await ws.receive_json()
+            if not isinstance(data, dict):
+                continue
+            await collab_manager.handle_message(room_id, user_id, data)
+    except WebSocketDisconnect:
+        logger.info("Collab peer %s disconnected from room %s.", user_id, room_id)
+    except Exception as exc:
+        logger.debug("Collab websocket exception for %s: %s", user_id, exc)
+    finally:
+        await collab_manager.disconnect(room_id, user_id)
 
 
 # --------------------------------------------------------------------------- #

@@ -94,4 +94,38 @@ export const createUISlice: StateCreator<StoreState, [], [], UISlice> = (set) =>
   classroomMode: false,
   classroomPresenting: false,
   toggleClassroomMode: () => set((state) => ({ classroomMode: !state.classroomMode })),
+  toggleClassroomPresenting: () => set((state) => ({ classroomPresenting: !state.classroomPresenting })),
+
+  // Phase 5.8c (#301): Collaborative cursors & presence
+  collabEnabled: false,
+  collabConnected: false,
+  collabRoomId: "default",
+  collabPeers: {},
+  collabSelection: null,
+  toggleCollab: () => set((state) => ({ collabEnabled: !state.collabEnabled })),
+  setCollabEnabled: (collabEnabled) => set({ collabEnabled }),
+  setCollabConnected: (collabConnected) => set({ collabConnected }),
+  setCollabRoomId: (collabRoomId) => set({ collabRoomId }),
+  setCollabPeers: (collabPeers) => set({ collabPeers }),
+  updatePeerCursor: (userId, cursor) => set((state) => {
+    const existing = state.collabPeers[userId];
+    if (!existing) return state;
+    return {
+      collabPeers: {
+        ...state.collabPeers,
+        [userId]: { ...existing, cursor },
+      },
+    };
+  }),
+  updatePeerSelection: (userId, selection) => set((state) => {
+    const existing = state.collabPeers[userId];
+    if (!existing) return state;
+    return {
+      collabPeers: {
+        ...state.collabPeers,
+        [userId]: { ...existing, selection },
+      },
+    };
+  }),
+  setCollabSelection: (collabSelection) => set({ collabSelection }),
 });

@@ -5,6 +5,7 @@ import { useStore } from "@/lib/store";
 import type { NavMode } from "@/lib/store/types";
 import { TOKENS } from "./primitives";
 import { cueDistrict } from "@/lib/sound";
+import { CollabPresenceBar } from "../collab/CollabPresenceBar";
 
 export function CameraControlGroup({
   variant = "bar",
@@ -198,6 +199,11 @@ export function CameraControlGroup({
       >
         {sonificationEnabled ? "SONIFY ON" : "SONIFY"}
       </button>
+
+      <div style={{ width: 1, height: "14px", background: "#252525", margin: "0 2px" }} />
+
+      {/* Collaborative Cursors & Presence (Phase 5.8c / #301) */}
+      <CollabPresenceBar />
     </div>
   );
 }
