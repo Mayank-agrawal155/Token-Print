@@ -14,9 +14,6 @@ export function CollabCursorOverlay() {
   const setCollabPeers = useStore((s) => s.setCollabPeers);
   const updatePeerCursor = useStore((s) => s.updatePeerCursor);
   const updatePeerSelection = useStore((s) => s.updatePeerSelection);
-  const classroomPresenting = useStore((s) => s.classroomPresenting);
-  const arch3dLayer = useStore((s) => s.arch3dLayer);
-  const arch3dOpKind = useStore((s) => s.arch3dOpKind);
 
   const [windowDims, setWindowDims] = useState({ width: 1920, height: 1080 });
   const containerRef = useRef<HTMLDivElement>(null);
@@ -88,14 +85,15 @@ export function CollabCursorOverlay() {
       const client = getCollabClient();
       if (!client.isConnected()) return;
 
+      const state = useStore.getState();
       const cursor = normalizeCursor(
         e.clientX,
         e.clientY,
         window.innerWidth,
         window.innerHeight,
         {
-          activeLayer: arch3dLayer,
-          activeOp: arch3dOpKind,
+          activeLayer: state.arch3dLayer,
+          activeOp: state.arch3dOpKind,
         }
       );
       client.sendCursor(cursor);
@@ -105,7 +103,7 @@ export function CollabCursorOverlay() {
     return () => {
       window.removeEventListener("pointermove", handlePointerMove);
     };
-  }, [collabEnabled, arch3dLayer, arch3dOpKind]);
+  }, [collabEnabled]);
 
   if (!collabEnabled) return null;
 

@@ -123,7 +123,7 @@ class CollabRoomManager:
 
         targets = [
             (uid, ws)
-            for uid, (ws, _) in self._rooms[room_id].items()
+            for uid, (ws, _) in list(self._rooms[room_id].items())
             if uid != exclude_user_id
         ]
 
@@ -134,8 +134,18 @@ class CollabRoomManager:
             except Exception:
                 stale.append(uid)
 
-        for uid in stale:
-            await self.disconnect(room_id, uid)
+        if stale:
+            async with self._lock:
+                if room_id in self._rooms:
+                    for uid in stale:
+                        if uid in self._rooms[room_id]:
+                            del self._rooms[room_id][uid]
+                    if not self._rooms[room_id]:
+                        del self._rooms[room_id]
+                        logger.info("Collab room '%s' is now empty and cleaned up.", room_id)
+
+            if room_id in self._rooms:
+                await self.broadcast_presence(room_id)
 
     async def handle_message(
         self,
@@ -152,7 +162,9 @@ class CollabRoomManager:
         msg_type = message.get("type")
 
         if msg_type == "cursor":
-            cursor_data = message.get("cursor") or {}
+            cursor_data = message.get("cursor")
+            if not isinstance(cursor_data, dict):
+                return
             peer.cursor = cursor_data
             await self.broadcast(
                 room_id,
@@ -166,6 +178,8 @@ class CollabRoomManager:
 
         elif msg_type == "selection":
             selection_data = message.get("selection")
+            if selection_data is not None and not isinstance(selection_data, dict):
+                return
             peer.selection = selection_data
             await self.broadcast(
                 room_id,
@@ -191,6 +205,12 @@ class CollabRoomManager:
                 },
                 exclude_user_id=user_id,
             )
+
+        elif msg_type == "role":
+            new_role = message.get("role", "viewer")
+            if new_role in ("viewer", "presenter"):
+                peer.role = new_role
+                await self.broadcast_presence(room_id)
 
         elif msg_type == "ping":
             ws, _ = self._rooms[room_id][user_id]

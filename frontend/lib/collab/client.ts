@@ -240,6 +240,22 @@ export class CollabClient {
     }
   }
 
+  /** Update peer role (e.g. become presenter or viewer) and notify room. */
+  public setRole(role: "viewer" | "presenter") {
+    this.self.role = role;
+    if (!this.isConnected()) return;
+    try {
+      this.ws?.send(
+        JSON.stringify({
+          type: "role",
+          role,
+        })
+      );
+    } catch {
+      // Ignore
+    }
+  }
+
   /** Broadcast presenter step in classroom mode. */
   public sendStep(opIndex: number, tokenIndex?: number) {
     if (!this.isConnected()) return;

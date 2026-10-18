@@ -65,7 +65,7 @@ export function CollabPresenceBar() {
   const handleTogglePresenting = () => {
     toggleClassroomPresenting();
     const nextRole = !classroomPresenting ? "presenter" : "viewer";
-    client.self.role = nextRole;
+    client.setRole(nextRole);
   };
 
   return (

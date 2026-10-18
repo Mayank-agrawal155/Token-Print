@@ -499,6 +499,12 @@ test("Phase 5.8c: Collab store slice toggling, initial state, and peer managemen
   assert.equal(store.getState().classroomPresenting, false);
   state0.toggleClassroomPresenting();
   assert.equal(store.getState().classroomPresenting, true);
+
+  // Classroom mode activates collab channel as per Issue #301 (Phase 5.8c / 5.6 overlap)
+  store.setState({ classroomMode: false, collabEnabled: false });
+  store.getState().toggleClassroomMode();
+  assert.equal(store.getState().classroomMode, true);
+  assert.equal(store.getState().collabEnabled, true);
 });
 
 test("Phase 5.8c: normalizeCursor correctly clamps coordinates and attaches layer metadata", () => {

@@ -93,7 +93,13 @@ export const createUISlice: StateCreator<StoreState, [], [], UISlice> = (set) =>
   }),
   classroomMode: false,
   classroomPresenting: false,
-  toggleClassroomMode: () => set((state) => ({ classroomMode: !state.classroomMode })),
+  toggleClassroomMode: () => set((state) => {
+    const nextClassroom = !state.classroomMode;
+    return {
+      classroomMode: nextClassroom,
+      collabEnabled: nextClassroom ? true : state.collabEnabled,
+    };
+  }),
   toggleClassroomPresenting: () => set((state) => ({ classroomPresenting: !state.classroomPresenting })),
 
   // Phase 5.8c (#301): Collaborative cursors & presence

@@ -76,6 +76,15 @@ def test_collab_room_presence_and_cursor_sync():
             assert step_msg["user_id"] == "alice"
             assert step_msg["op_index"] == 3
 
+            # Alice changes role to presenter
+            ws1.send_json({"type": "role", "role": "presenter"})
+            role_presence_p1 = ws1.receive_json()
+            assert role_presence_p1["type"] == "presence"
+            role_presence_p2 = ws2.receive_json()
+            assert role_presence_p2["type"] == "presence"
+            p1_entry = next(p for p in role_presence_p2["peers"] if p["user_id"] == "alice")
+            assert p1_entry["role"] == "presenter"
+
             # Ping/Pong test
             ws1.send_json({"type": "ping"})
             pong_msg = ws1.receive_json()
