@@ -12,6 +12,7 @@ import math
 import time
 from dataclasses import dataclass, field
 from typing import Any
+
 from fastapi import WebSocket
 
 logger = logging.getLogger("tokenprint.collab")
@@ -80,8 +81,8 @@ class CollabRoomManager:
             if user_id not in room and len(room) >= MAX_PEERS_PER_ROOM:
                 logger.warning(
                     "Rejecting collab connection for %s: room '%s' full (%d).",
-                    user_id,
-                    room_id,
+                    user_id.replace("\n", "").replace("\r", ""),
+                    room_id.replace("\n", "").replace("\r", ""),
                     MAX_PEERS_PER_ROOM,
                 )
                 return None
@@ -92,7 +93,8 @@ class CollabRoomManager:
                 if old_ws is not ws:
                     try:
                         await old_ws.close(code=1000)
-                    except Exception:
+                    except Exception:  # noqa: BLE001, S110
+                        # Best-effort close: the socket may already be gone.
                         pass
 
             # Ensure at most one active presenter per room
@@ -112,9 +114,9 @@ class CollabRoomManager:
 
         logger.info(
             "Peer %s (%s) connected to collab room '%s'. Total in room: %d",
-            user_id,
-            name,
-            room_id,
+            user_id.replace("\n", "").replace("\r", ""),
+            name.replace("\n", "").replace("\r", ""),
+            room_id.replace("\n", "").replace("\r", ""),
             len(self._rooms[room_id]),
         )
 
@@ -143,7 +145,7 @@ class CollabRoomManager:
                     if not room:
                         del self._rooms[room_id]
                         self._room_versions.pop(room_id, None)
-                        logger.info("Collab room '%s' is now empty and cleaned up.", room_id)
+                        logger.info("Collab room '%s' is now empty and cleaned up.", room_id.replace("\n", "").replace("\r", ""))
 
         if room_id in self._rooms:
             await self.broadcast_presence(room_id)
@@ -196,7 +198,7 @@ class CollabRoomManager:
                 # 0.8s timeout prevents any single slow/unresponsive peer from holding up the room
                 await asyncio.wait_for(ws.send_json(message), timeout=0.8)
                 return uid, ws, True
-            except Exception:
+            except Exception:  # noqa: BLE001 — any send failure marks the peer unreachable
                 return uid, ws, False
 
         results = await asyncio.gather(
@@ -219,7 +221,7 @@ class CollabRoomManager:
                     if not self._rooms[room_id]:
                         del self._rooms[room_id]
                         self._room_versions.pop(room_id, None)
-                        logger.info("Collab room '%s' is now empty and cleaned up.", room_id)
+                        logger.info("Collab room '%s' is now empty and cleaned up.", room_id.replace("\n", "").replace("\r", ""))
 
             if room_id in self._rooms:
                 await self.broadcast_presence(room_id)
@@ -360,7 +362,8 @@ class CollabRoomManager:
             ws, _ = self._rooms[room_id][user_id]
             try:
                 await ws.send_json({"type": "pong", "timestamp": time.time()})
-            except Exception:
+            except Exception:  # noqa: BLE001, S110
+                # Best-effort pong: the peer may have already disconnected.
                 pass
 
 

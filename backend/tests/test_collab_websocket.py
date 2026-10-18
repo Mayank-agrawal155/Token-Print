@@ -133,23 +133,20 @@ def test_collab_handshake_parameter_validation():
     client = TestClient(app)
 
     # Invalid room ID characters
-    with pytest.raises(Exception):
-        with client.websocket_connect("/ws/collab/invalid%20room%21"):
-            pass
+    with pytest.raises(Exception), client.websocket_connect("/ws/collab/invalid%20room%21"):
+        pass
 
     # Invalid CSS url() injection in color parameter
-    with pytest.raises(Exception):
-        with client.websocket_connect(
-            "/ws/collab/room-safe?user_id=attacker&color=url(https://evil.com)"
-        ):
-            pass
+    with pytest.raises(Exception), client.websocket_connect(
+        "/ws/collab/room-safe?user_id=attacker&color=url(https://evil.com)"
+    ):
+        pass
 
     # Invalid role
-    with pytest.raises(Exception):
-        with client.websocket_connect(
-            "/ws/collab/room-safe?user_id=attacker&color=%2310b981&role=superadmin"
-        ):
-            pass
+    with pytest.raises(Exception), client.websocket_connect(
+        "/ws/collab/room-safe?user_id=attacker&color=%2310b981&role=superadmin"
+    ):
+        pass
 
 
 def test_collab_socket_isolation_on_reconnect():

@@ -945,9 +945,17 @@ async def ws_collab(
                 continue
             await collab_manager.handle_message(room_id, user_id, data)
     except WebSocketDisconnect:
-        logger.info("Collab peer %s disconnected from room %s.", user_id, room_id)
-    except Exception as exc:
-        logger.debug("Collab websocket exception for %s: %s", user_id, exc)
+        logger.info(
+            "Collab peer %s disconnected from room %s.",
+            user_id.replace("\n", "").replace("\r", ""),
+            room_id.replace("\n", "").replace("\r", ""),
+        )
+    except Exception as exc:  # noqa: BLE001 — keep the collab room alive on per-message errors
+        logger.debug(
+            "Collab websocket exception for %s: %s",
+            user_id.replace("\n", "").replace("\r", ""),
+            str(exc).replace("\n", "").replace("\r", ""),
+        )
     finally:
         await collab_manager.disconnect(room_id, user_id, ws)
 
