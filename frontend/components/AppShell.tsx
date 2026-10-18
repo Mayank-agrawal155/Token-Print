@@ -85,14 +85,17 @@ export default function AppShell() {
   // Phase 5.8c (#301): Auto-join collab session if present in URL (?collab=true or ?room=xyz)
   const collabParam = searchParams?.get("collab");
   const roomParam = searchParams?.get("room");
+  const wtModel = useStore((s) => s.wtModel);
+  const genMetaModel = useStore((s) => s.genMeta?.model);
   useEffect(() => {
     if (collabParam === "true" || roomParam) {
+      const activeModelId = ((genMetaModel || wtModel || "main") as string).replace(/[^a-zA-Z0-9_\-\.:]/g, "_");
       useStore.setState({
         collabEnabled: true,
-        ...(roomParam ? { collabRoomId: roomParam } : {}),
+        collabRoomId: roomParam || `model_${activeModelId}`,
       });
     }
-  }, [collabParam, roomParam]);
+  }, [collabParam, roomParam, wtModel, genMetaModel]);
 
   // Responsive sidebar collapse state
   const [leftCollapsed, setLeftCollapsed] = useState(false);

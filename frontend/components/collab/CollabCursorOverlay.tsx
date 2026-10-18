@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { useStore } from "@/lib/store";
-import { getCollabClient, normalizeCursor } from "@/lib/collab/client";
+import { getCollabClient, normalizeCursor, sanitizeColor } from "@/lib/collab/client";
 import type { CollabPeer } from "@/lib/collab/types";
 
 export function CollabCursorOverlay() {
@@ -16,6 +16,7 @@ export function CollabCursorOverlay() {
   const updatePeerSelection = useStore((s) => s.updatePeerSelection);
 
   const [windowDims, setWindowDims] = useState({ width: 1920, height: 1080 });
+  const [, setTick] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Sync window dimensions for cursor positioning
@@ -28,6 +29,13 @@ export function CollabCursorOverlay() {
     return () => window.removeEventListener("resize", updateSize);
   }, []);
 
+  // Periodic 5-second interval to expire idle cursors even when no store mutations occur
+  useEffect(() => {
+    if (!collabEnabled) return;
+    const interval = setInterval(() => setTick((t) => t + 1), 5000);
+    return () => clearInterval(interval);
+  }, [collabEnabled]);
+
   // Initialize and manage Collab WebSocket connection
   useEffect(() => {
     if (!collabEnabled) {
@@ -38,6 +46,10 @@ export function CollabCursorOverlay() {
     const client = getCollabClient({
       onStatusChange: (connected) => {
         setCollabConnected(connected);
+        if (!connected) {
+          // Clear active peers immediately upon disconnection to prevent stale counts
+          setCollabPeers({});
+        }
       },
       onPresence: (peers) => {
         const peersMap: Record<string, CollabPeer> = {};
@@ -49,15 +61,17 @@ export function CollabCursorOverlay() {
         setCollabPeers(peersMap);
       },
       onPeerCursor: (userId, cursor) => {
-        updatePeerCursor(userId, cursor);
+        // Track local receivedAt timestamp to measure staleness independent of peer clock skew
+        updatePeerCursor(userId, { ...cursor, receivedAt: Date.now() });
       },
       onPeerSelection: (userId, selection) => {
         updatePeerSelection(userId, selection);
       },
-      onPeerStep: (_userId, opIndex) => {
-        // In classroom mode, student viewers follow instructor step
+      onPeerStep: (userId, opIndex) => {
+        // In classroom mode, student viewers follow instructor step if sender is recognized as presenter
         const isPresenter = useStore.getState().classroomPresenting;
-        if (!isPresenter) {
+        const sender = useStore.getState().collabPeers[userId];
+        if (!isPresenter && (!sender || sender.role === "presenter")) {
           useStore.setState({ opIndex });
         }
       },
@@ -109,7 +123,7 @@ export function CollabCursorOverlay() {
 
   const now = Date.now();
   const activePeers = Object.values(collabPeers).filter(
-    (p) => p.cursor && now - p.cursor.timestamp < 15000 // Active within 15 seconds
+    (p) => p.cursor && now - (p.cursor.receivedAt ?? p.cursor.timestamp) < 15000 // Active within 15 seconds
   );
 
   return (
@@ -129,7 +143,7 @@ export function CollabCursorOverlay() {
         const cursor = peer.cursor!;
         const posX = cursor.x * windowDims.width;
         const posY = cursor.y * windowDims.height;
-        const color = peer.color || "#38bdf8";
+        const color = sanitizeColor(peer.color);
 
         return (
           <div
@@ -231,7 +245,7 @@ export function CollabCursorOverlay() {
                     paddingLeft: 4,
                   }}
                 >
-                  [{peer.selection.kind}: {peer.selection.name || peer.selection.index}]
+                  [{peer.selection.kind}: {String(peer.selection.name ?? peer.selection.index)}]
                 </span>
               )}
             </div>

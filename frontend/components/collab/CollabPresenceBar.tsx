@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { useStore } from "@/lib/store";
-import { getCollabClient } from "@/lib/collab/client";
+import { getCollabClient, sanitizeColor } from "@/lib/collab/client";
 
 export function CollabPresenceBar() {
   const collabEnabled = useStore((s) => s.collabEnabled);
@@ -55,10 +55,19 @@ export function CollabPresenceBar() {
     if (typeof window !== "undefined") {
       const url = new URL(window.location.href);
       url.searchParams.set("collab", "true");
-      url.searchParams.set("room", collabRoomId || "default");
-      navigator.clipboard.writeText(url.toString());
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      url.searchParams.set("room", collabRoomId || "model_qwen05");
+      const link = url.toString();
+      const done = () => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      };
+      if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(link).then(done, () => {
+          window.prompt("Copy invite link:", link);
+        });
+      } else {
+        window.prompt("Copy invite link:", link);
+      }
     }
   };
 
@@ -115,7 +124,7 @@ export function CollabPresenceBar() {
               width: 14,
               height: 14,
               borderRadius: "50%",
-              background: client.self.color,
+              background: sanitizeColor(client.self.color),
               border: "1.5px solid #000000",
               display: "inline-block",
             }}
@@ -127,7 +136,7 @@ export function CollabPresenceBar() {
                 width: 14,
                 height: 14,
                 borderRadius: "50%",
-                background: peer.color,
+                background: sanitizeColor(peer.color),
                 border: "1.5px solid #000000",
                 marginLeft: -4,
                 display: "inline-block",
@@ -239,7 +248,7 @@ export function CollabPresenceBar() {
                     width: 8,
                     height: 8,
                     borderRadius: "50%",
-                    background: peer.color,
+                    background: sanitizeColor(peer.color),
                   }}
                 />
                 <span>{peer.name}</span>

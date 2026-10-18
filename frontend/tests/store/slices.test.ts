@@ -505,10 +505,28 @@ test("Phase 5.8c: Collab store slice toggling, initial state, and peer managemen
   store.getState().toggleClassroomMode();
   assert.equal(store.getState().classroomMode, true);
   assert.equal(store.getState().collabEnabled, true);
+
+  // Early peer update buffering: updates for unknown peers create placeholder and merge into presence
+  const earlyCursor = { x: 0.1, y: 0.2, timestamp: 2000 };
+  store.getState().updatePeerCursor("early-peer", earlyCursor);
+  assert.ok(store.getState().collabPeers["early-peer"]);
+  assert.deepEqual(store.getState().collabPeers["early-peer"].cursor, earlyCursor);
+
+  // When presence arrives without a cursor, the buffered cursor is preserved
+  store.getState().setCollabPeers({
+    "early-peer": {
+      user_id: "early-peer",
+      name: "Early Peer",
+      color: "#10b981",
+      role: "viewer",
+    },
+  });
+  assert.equal(store.getState().collabPeers["early-peer"].name, "Early Peer");
+  assert.deepEqual(store.getState().collabPeers["early-peer"].cursor, earlyCursor);
 });
 
 test("Phase 5.8c: normalizeCursor correctly clamps coordinates and attaches layer metadata", () => {
-  const { normalizeCursor } = require("../../lib/collab/client");
+  const { normalizeCursor, sanitizeColor } = require("../../lib/collab/client");
 
   // Centered coordinate
   const c1 = normalizeCursor(500, 250, 1000, 500, { activeLayer: 5, activeOp: "mlp" });
@@ -529,5 +547,12 @@ test("Phase 5.8c: normalizeCursor correctly clamps coordinates and attaches laye
   const c3 = normalizeCursor(10, 10, 0, 0);
   assert.ok(Number.isFinite(c3.x));
   assert.ok(Number.isFinite(c3.y));
+
+  // Color sanitization against CSS injection
+  assert.equal(sanitizeColor("#10b981"), "#10b981");
+  assert.equal(sanitizeColor("#FFFFFF"), "#FFFFFF");
+  assert.equal(sanitizeColor("url(http://evil.com)"), "#38bdf8");
+  assert.equal(sanitizeColor("red; background: blue"), "#38bdf8");
+  assert.equal(sanitizeColor(undefined), "#38bdf8");
 });
 

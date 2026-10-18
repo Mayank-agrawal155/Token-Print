@@ -4,6 +4,7 @@ import React from "react";
 import { Billboard, Text } from "@react-three/drei";
 import { useStore } from "@/lib/store";
 import { LAYOUT, layerOrigin } from "./ArchitectureLayout";
+import { sanitizeColor } from "@/lib/collab/client";
 
 export function Collab3DBeacon() {
   const collabEnabled = useStore((s) => s.collabEnabled);
@@ -22,13 +23,19 @@ export function Collab3DBeacon() {
             ? peer.selection.index
             : peer.cursor?.activeLayer ?? null;
 
-        if (targetLayer === null || targetLayer === undefined || targetLayer < 0) {
+        if (
+          targetLayer === null ||
+          targetLayer === undefined ||
+          typeof targetLayer !== "number" ||
+          isNaN(targetLayer) ||
+          targetLayer < 0
+        ) {
           return null;
         }
 
         const [, originY] = layerOrigin(targetLayer);
         const beaconY = originY - LAYOUT.LAYER_HEIGHT * 0.35;
-        const color = peer.color || "#38bdf8";
+        const color = sanitizeColor(peer.color);
 
         return (
           <group key={peer.user_id} position={[0, beaconY, 0]}>

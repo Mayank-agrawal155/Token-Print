@@ -20,6 +20,7 @@ import logging
 import os
 import re
 import time
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -879,6 +880,11 @@ async def ws_generate(ws: WebSocket) -> None:
 # Collaborative Multi-Viewer & Classroom Cursors (Phase 5.8c / #301)
 # --------------------------------------------------------------------------- #
 
+_COLLAB_ROOM_PATTERN = re.compile(r"^[a-zA-Z0-9_\-\.:]{1,64}$")
+_COLLAB_USER_PATTERN = re.compile(r"^[a-zA-Z0-9_\-\.:]{1,64}$")
+_COLLAB_COLOR_PATTERN = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+
 @app.websocket("/ws/collab/{room_id}")
 async def ws_collab(
     ws: WebSocket,
@@ -894,8 +900,30 @@ async def ws_collab(
     to share presence, pointer coordinates, layer/op selections, and
     classroom presenter stepping.
     """
+    # Reject malformed room IDs before accepting
+    if not _COLLAB_ROOM_PATTERN.match(room_id):
+        await ws.close(code=1008)
+        return
+
+    # If anonymous or empty, assign a unique distinct ID to avoid collisions
+    if not user_id or user_id == "anon":
+        user_id = f"u_{uuid.uuid4().hex[:8]}"
+    elif not _COLLAB_USER_PATTERN.match(user_id):
+        await ws.close(code=1008)
+        return
+
+    if role not in ("viewer", "presenter"):
+        await ws.close(code=1008)
+        return
+
+    if not _COLLAB_COLOR_PATTERN.match(color):
+        await ws.close(code=1008)
+        return
+
+    name = (name.strip()[:32] if name else "Viewer") or "Viewer"
+
     await ws.accept()
-    await collab_manager.connect(
+    peer = await collab_manager.connect(
         room_id=room_id,
         user_id=user_id,
         ws=ws,
@@ -903,6 +931,10 @@ async def ws_collab(
         color=color,
         role=role,
     )
+    if peer is None:
+        await ws.close(code=1008)
+        return
+
     try:
         while True:
             data = await ws.receive_json()
@@ -914,7 +946,7 @@ async def ws_collab(
     except Exception as exc:
         logger.debug("Collab websocket exception for %s: %s", user_id, exc)
     finally:
-        await collab_manager.disconnect(room_id, user_id)
+        await collab_manager.disconnect(room_id, user_id, ws)
 
 
 # --------------------------------------------------------------------------- #

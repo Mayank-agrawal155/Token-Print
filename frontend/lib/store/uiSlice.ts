@@ -1,5 +1,6 @@
 import type { StateCreator } from "zustand";
 import { setMuted as setSoundMuted } from "../sound";
+import type { CollabPeer } from "../collab/types";
 import type { StoreState, UISlice } from "./types";
 
 export const createUISlice: StateCreator<StoreState, [], [], UISlice> = (set) => ({
@@ -95,9 +96,12 @@ export const createUISlice: StateCreator<StoreState, [], [], UISlice> = (set) =>
   classroomPresenting: false,
   toggleClassroomMode: () => set((state) => {
     const nextClassroom = !state.classroomMode;
+    const modelTag = (state.wtModel || "main").replace(/[^a-zA-Z0-9_\-\.:]/g, "_");
+    const scopedRoom = state.collabRoomId || `model_${modelTag}`;
     return {
       classroomMode: nextClassroom,
       collabEnabled: nextClassroom ? true : state.collabEnabled,
+      collabRoomId: scopedRoom,
     };
   }),
   toggleClassroomPresenting: () => set((state) => ({ classroomPresenting: !state.classroomPresenting })),
@@ -105,17 +109,41 @@ export const createUISlice: StateCreator<StoreState, [], [], UISlice> = (set) =>
   // Phase 5.8c (#301): Collaborative cursors & presence
   collabEnabled: false,
   collabConnected: false,
-  collabRoomId: "default",
+  collabRoomId: "model_qwen05",
   collabPeers: {},
   collabSelection: null,
-  toggleCollab: () => set((state) => ({ collabEnabled: !state.collabEnabled })),
+  toggleCollab: () => set((state) => {
+    const nextCollab = !state.collabEnabled;
+    const modelTag = (state.wtModel || "main").replace(/[^a-zA-Z0-9_\-\.:]/g, "_");
+    const scopedRoom = state.collabRoomId || `model_${modelTag}`;
+    return {
+      collabEnabled: nextCollab,
+      collabRoomId: scopedRoom,
+    };
+  }),
   setCollabEnabled: (collabEnabled) => set({ collabEnabled }),
   setCollabConnected: (collabConnected) => set({ collabConnected }),
   setCollabRoomId: (collabRoomId) => set({ collabRoomId }),
-  setCollabPeers: (collabPeers) => set({ collabPeers }),
+  setCollabPeers: (collabPeers) => set((state) => {
+    // Preserve any buffered cursor/selection received prior to the presence broadcast
+    const merged: Record<string, CollabPeer> = {};
+    for (const [uid, peer] of Object.entries(collabPeers)) {
+      const prev = state.collabPeers[uid];
+      merged[uid] = {
+        ...peer,
+        cursor: peer.cursor ?? prev?.cursor ?? null,
+        selection: peer.selection ?? prev?.selection ?? null,
+      };
+    }
+    return { collabPeers: merged };
+  }),
   updatePeerCursor: (userId, cursor) => set((state) => {
-    const existing = state.collabPeers[userId];
-    if (!existing) return state;
+    const existing = state.collabPeers[userId] || {
+      user_id: userId,
+      name: `Viewer-${userId.slice(0, 4)}`,
+      color: "#38bdf8",
+      role: "viewer" as const,
+    };
     return {
       collabPeers: {
         ...state.collabPeers,
@@ -124,8 +152,12 @@ export const createUISlice: StateCreator<StoreState, [], [], UISlice> = (set) =>
     };
   }),
   updatePeerSelection: (userId, selection) => set((state) => {
-    const existing = state.collabPeers[userId];
-    if (!existing) return state;
+    const existing = state.collabPeers[userId] || {
+      user_id: userId,
+      name: `Viewer-${userId.slice(0, 4)}`,
+      color: "#38bdf8",
+      role: "viewer" as const,
+    };
     return {
       collabPeers: {
         ...state.collabPeers,

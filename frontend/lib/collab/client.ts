@@ -16,6 +16,14 @@ const PALETTE = [
   "#8b5cf6", // Violet
 ];
 
+/** Validate and normalize a hex color value to prevent external CSS url() injection. */
+export function sanitizeColor(color: string | undefined): string {
+  if (color && /^#[0-9a-fA-F]{6}$/.test(color)) {
+    return color;
+  }
+  return "#38bdf8";
+}
+
 /** Normalize screen mouse position into [0, 1] relative coordinates. */
 export function normalizeCursor(
   clientX: number,
@@ -66,6 +74,8 @@ export class CollabClient {
   private rafId: number | null = null;
   private isIntentionalClose: boolean = false;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private reconnectAttempts: number = 0;
+  private lastPresenceVersion: number = 0;
 
   public self: CollabPeer;
 
@@ -76,7 +86,7 @@ export class CollabClient {
     this.handlers = handlers;
     const uid = selfMeta?.user_id || generateUserId();
     const name = selfMeta?.name || `Viewer-${uid.slice(2, 6)}`;
-    const color = selfMeta?.color || pickRandomColor();
+    const color = sanitizeColor(selfMeta?.color || pickRandomColor());
     const role = selfMeta?.role || "viewer";
 
     this.self = {
@@ -103,23 +113,29 @@ export class CollabClient {
     const params = new URLSearchParams({
       user_id: this.self.user_id,
       name: this.self.name,
-      color: this.self.color,
+      color: sanitizeColor(this.self.color),
       role: this.self.role,
     });
     const url = `${baseWs}/ws/collab/${encodeURIComponent(this.roomId)}?${params.toString()}`;
 
+    let socket: WebSocket;
     try {
-      this.ws = new WebSocket(url);
+      socket = new WebSocket(url);
+      this.ws = socket;
     } catch (e) {
       this.handlers.onError?.(e instanceof Error ? e.message : "Failed to open WebSocket");
       return;
     }
 
-    this.ws.onopen = () => {
+    // Capture socket instance to isolate callbacks from stale sockets
+    socket.onopen = () => {
+      if (this.ws !== socket) return;
+      this.reconnectAttempts = 0;
       this.handlers.onStatusChange?.(true);
     };
 
-    this.ws.onmessage = (event) => {
+    socket.onmessage = (event) => {
+      if (this.ws !== socket) return;
       try {
         const msg: CollabMessage = JSON.parse(event.data);
         this.handleMessage(msg);
@@ -128,23 +144,36 @@ export class CollabClient {
       }
     };
 
-    this.ws.onerror = () => {
+    socket.onerror = () => {
+      if (this.ws !== socket) return;
       this.handlers.onError?.("Collab WebSocket connection error");
     };
 
-    this.ws.onclose = () => {
+    socket.onclose = () => {
+      if (this.ws !== socket) return;
       this.handlers.onStatusChange?.(false);
       this.ws = null;
       if (!this.isIntentionalClose) {
-        // Attempt reconnect after delay
-        if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
-        this.reconnectTimer = setTimeout(() => {
-          if (!this.isIntentionalClose) {
-            this.connect(this.roomId);
-          }
-        }, 3000);
+        this.scheduleReconnect();
       }
     };
+  }
+
+  private scheduleReconnect() {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+    }
+    // Exponential backoff capped at 30s with random jitter to prevent thundering herd
+    const baseDelay = Math.min(30000, 1000 * Math.pow(1.5, this.reconnectAttempts));
+    const jitter = Math.random() * 1000;
+    const delay = baseDelay + jitter;
+    this.reconnectAttempts++;
+
+    this.reconnectTimer = setTimeout(() => {
+      if (!this.isIntentionalClose) {
+        this.connect(this.roomId);
+      }
+    }, delay);
   }
 
   public disconnect() {
@@ -158,13 +187,21 @@ export class CollabClient {
       this.rafId = null;
     }
     if (this.ws) {
+      const socket = this.ws;
+      // Detach event listeners so closing this socket fires no callbacks
+      socket.onopen = null;
+      socket.onmessage = null;
+      socket.onerror = null;
+      socket.onclose = null;
       try {
-        this.ws.close();
+        socket.close();
       } catch {
         // Ignore
       }
       this.ws = null;
     }
+    this.reconnectAttempts = 0;
+    this.lastPresenceVersion = 0;
     this.handlers.onStatusChange?.(false);
   }
 
@@ -175,6 +212,13 @@ export class CollabClient {
   private handleMessage(msg: CollabMessage) {
     switch (msg.type) {
       case "presence":
+        // Reject out-of-order stale presence snapshots using monotonic versions
+        if (msg.version !== undefined) {
+          if (msg.version < this.lastPresenceVersion) {
+            return;
+          }
+          this.lastPresenceVersion = msg.version;
+        }
         this.handlers.onPresence?.(msg.peers, msg.count);
         break;
       case "peer_cursor":

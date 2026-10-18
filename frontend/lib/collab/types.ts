@@ -6,6 +6,7 @@ export interface CollabCursor {
   activeLayer?: number | null;
   activeOp?: string | null;
   timestamp: number;
+  receivedAt?: number; // Local timestamp upon arrival for clock-skew independent staleness
 }
 
 export interface CollabSelection {
@@ -25,12 +26,13 @@ export interface CollabPeer {
 }
 
 export type CollabMessage =
-  | { type: "presence"; room_id: string; peers: CollabPeer[]; count: number; timestamp: number }
+  | { type: "presence"; room_id: string; peers: CollabPeer[]; count: number; version?: number; timestamp: number }
   | { type: "peer_cursor"; user_id: string; cursor: CollabCursor }
   | { type: "peer_selection"; user_id: string; selection: CollabSelection | null }
   | { type: "peer_step"; user_id: string; op_index: number; token_index?: number }
   | { type: "cursor"; cursor: CollabCursor }
   | { type: "selection"; selection: CollabSelection | null }
   | { type: "step"; op_index: number; token_index?: number }
+  | { type: "role"; role: "viewer" | "presenter" }
   | { type: "ping" }
   | { type: "pong"; timestamp: number };
