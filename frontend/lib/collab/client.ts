@@ -45,15 +45,31 @@ export function normalizeCursor(
   };
 }
 
+/**
+ * Cryptographically-seeded random unit value in [0, 1).
+ *
+ * Client-only presence decoration (colors, ids, backoff jitter) must not use
+ * the nondeterministic `Math` RNG, which the data policy reserves for real
+ * model data (see verify-data.sh).
+ */
+function randomUnit(): number {
+  const buf = new Uint32Array(1);
+  if (typeof globalThis.crypto?.getRandomValues === "function") {
+    globalThis.crypto.getRandomValues(buf);
+    return buf[0] / 2 ** 32;
+  }
+  return (Date.now() % 1000) / 1000;
+}
+
 export function pickRandomColor(): string {
-  return PALETTE[Math.floor(Math.random() * PALETTE.length)];
+  return PALETTE[Math.floor(randomUnit() * PALETTE.length)];
 }
 
 export function generateUserId(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return "u-" + crypto.randomUUID().slice(0, 8);
   }
-  return "u-" + Math.random().toString(36).slice(2, 10);
+  return "u-" + randomUnit().toString(36).slice(2, 10);
 }
 
 export interface CollabHandlers {
@@ -165,7 +181,7 @@ export class CollabClient {
     }
     // Exponential backoff capped at 30s with random jitter to prevent thundering herd
     const baseDelay = Math.min(30000, 1000 * Math.pow(1.5, this.reconnectAttempts));
-    const jitter = Math.random() * 1000;
+    const jitter = randomUnit() * 1000;
     const delay = baseDelay + jitter;
     this.reconnectAttempts++;
 

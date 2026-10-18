@@ -7,7 +7,6 @@ import type { CollabPeer } from "@/lib/collab/types";
 
 export function CollabCursorOverlay() {
   const collabEnabled = useStore((s) => s.collabEnabled);
-  const collabConnected = useStore((s) => s.collabConnected);
   const collabRoomId = useStore((s) => s.collabRoomId);
   const collabPeers = useStore((s) => s.collabPeers);
   const setCollabConnected = useStore((s) => s.setCollabConnected);
